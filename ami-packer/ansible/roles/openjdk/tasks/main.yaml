@@ -1,0 +1,12 @@
+- name: add openjdk ppa
+  apt_repository: repo='ppa:openjdk-r/ppa'
+- name: add java repository key
+  shell: apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 86F44E2A
+
+- name: install or update openjdk via apt
+  apt: pkg={{ item }} update_cache=yes
+  with_items:
+       - openjdk-8-jre-headless
+       - openjdk-8-jdk
+  tags:
+    - java

@@ -1,0 +1,10 @@
+---
+- hosts: all
+  sudo: yes
+  gather_facts: yes
+  roles:
+    - cloudinit
+    - common
+    - openjdk
+    - cdh5
+    - spark

@@ -1,0 +1,29 @@
+{
+    "builders": [
+        {
+            "type": "amazon-ebs",
+            "region": "us-east-1",
+            "source_ami": "ami-d05e75b8",
+            "instance_type": "m3.medium",
+            "ssh_username": "ubuntu",
+            "ami_name": "spark 1.5.0 cdh5.5 {{ timestamp }}",
+            "associate_public_ip_address" : true
+        }
+    ],
+
+    "provisioners": [
+        {
+            "type": "shell",
+            "script": "scripts/setup_ansible.sh"
+        },
+        {
+            "type": "ansible-local",
+            "playbook_file": "ansible/main.yml",
+            "playbook_dir": "ansible/"
+        },
+        {
+            "type": "shell",
+            "script": "scripts/cleanup.sh"
+        }
+    ]
+}

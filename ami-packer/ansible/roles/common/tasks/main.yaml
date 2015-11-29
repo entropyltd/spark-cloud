@@ -1,0 +1,33 @@
+- name: install commonly used packages via apt
+  apt: pkg={{ item }} update_cache=true cache_valid_time=3600
+  with_items:
+    - "vim"
+    - "screen"
+    - "python-pip"
+    - "git-core"
+    - "ntp"
+    - "iptraf"
+    - "sysstat"
+
+- name: apt-get upgrade
+  apt: upgrade=full
+
+- name: Install python-pycurl for ansible
+  apt: pkg=python-pycurl
+
+- name: Ntp | make sure NTP is running
+  service: name=ntp state=running enabled=yes
+  tags: ntp
+
+- name: install s3cmd
+  pip: name=s3cmd
+
+- name: Install additional scientific python packages
+  apt: pkg={{ item }}
+  with_items:
+  - python-scipy
+  - python-sklearn
+  - python-numpy
+  - python-pandas
+  - python-matplotlib
+  - python-apt

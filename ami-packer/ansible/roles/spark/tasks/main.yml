@@ -1,0 +1,18 @@
+- name: install spark
+  apt: pkg={{ item }} update_cache=yes
+  with_items:
+    - spark-master
+    - spark-worker
+    - spark-netlib
+    - spark-python
+    - spark-history-server
+
+- name: copy spark configuration files
+  template: src={{ item }}.j2 dest=/etc/spark/conf/{{ item }} owner=spark group=spark mode=0644
+  with_items:
+  - spark-env.sh
+
+- name: copy spark init
+  template: src={{ item }}.j2 dest=/etc/init.d/{{ item }} owner=root group=root mode=0755
+  with_items:
+  - spark-master

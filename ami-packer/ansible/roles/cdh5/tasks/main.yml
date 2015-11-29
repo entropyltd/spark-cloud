@@ -1,0 +1,55 @@
+- name: add Cloudera CDH5 key
+  apt_key: url=http://archive.cloudera.com/cdh5/ubuntu/trusty/amd64/cdh/archive.key
+  tags:
+    - cdh5
+
+- name: add Cloudera CDH5 repository
+  apt_repository: repo='deb [arch=amd64] http://archive.cloudera.com/cdh5/ubuntu/trusty/amd64/cdh trusty-cdh5 contrib'
+  tags:
+    - cdh5
+
+- name: add Cloudera CDH5 GPL extras repository
+  apt_repository: repo='deb [arch=amd64] http://archive.cloudera.com/gplextras5/ubuntu/trusty/amd64/gplextras trusty-gplextras5 contrib'
+  tags:
+    - cdh5
+
+- name: install hadoop base pkgs
+  apt: name={{ item }} state=present
+  with_items:
+  - hadoop
+  - hadoop-hdfs
+  - hadoop-client
+  - hadoop-lzo
+  tags:
+  - cdh5
+
+- name: create /etc/hadoop/conf.cluster
+  file: path=/etc/hadoop/conf.cluster state=directory owner=root group=root mode=0755
+  register: create_hadoop_conf
+  tags:
+  - cdh5
+
+- name: create alternatives for hadoop-conf
+  shell: update-alternatives --install /etc/hadoop/conf hadoop-conf {{ item }} 50
+  with_items:
+  - /etc/hadoop/conf.cluster
+  when: create_hadoop_conf|changed
+  tags:
+  - cdh5
+
+- name: create alternatives for hadoop-conf
+  shell: update-alternatives --set hadoop-conf {{ item }}
+  with_items:
+  - /etc/hadoop/conf.cluster
+  when: create_hadoop_conf|changed
+  tags:
+  - cdh5
+
+- name: copy the hadoop configuration files
+  template: src=hadoop/{{ item }}.j2 dest=/etc/hadoop/conf.cluster/{{ item }} owner=hdfs group=hadoop mode=0664
+  with_items:
+  - core-site.xml
+  - log4j.properties
+  register: copy_hadoop_conf
+  tags:
+  - cdh5

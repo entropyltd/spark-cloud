@@ -1,0 +1,13 @@
+- name: install required packages
+  apt: pkg={{ item }}
+  with_items:
+  - mdadm
+
+- name: copy instance store configuration script
+  template: src={{ item }} dest=/etc/cloud/{{ item }} owner=root group=root mode=0755
+  with_items:
+  - configure-mdraid.sh
+  
+- name: cloudinit bootcmd
+  template: src=10_bootcmd.cfg dest=/etc/cloud/cloud.cfg.d/10_bootcmd.cfg owner=root group=root mode=0644
+

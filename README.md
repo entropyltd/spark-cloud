@@ -5,6 +5,8 @@ Spark-cloud is a set of scripts for starting spark clusters on ec2
 spark-cloud is Alpha quality pre-relase software, you are using it at your own risk.
 Always check that your clusters have properly started/stopped.
 
+spark-cloud will currently only work in us-east AWS zone, support for other zones coming very soon!
+
 # Example usage
 
 ## To launch a cluster into VPC

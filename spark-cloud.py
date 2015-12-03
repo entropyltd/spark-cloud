@@ -15,8 +15,15 @@ import boto.ec2.autoscale
 import boto.ec2.cloudwatch
 from boto.ec2.autoscale import LaunchConfiguration, AutoScalingGroup, ScalingPolicy
 from boto.ec2.cloudwatch import MetricAlarm
-from boto.ec2.networkinterface import NetworkInterfaceSpecification,NetworkInterfaceCollection
+from boto.ec2.networkinterface import NetworkInterfaceSpecification, NetworkInterfaceCollection
 
+
+def get_group(conn, name):
+    """
+    Get the EC2 security group of the given name
+    """
+    groups = conn.get_all_security_groups()
+    return [g for g in groups if g.name == name]
 
 def get_or_make_group(conn, name, vpc_id):
     """
@@ -40,12 +47,11 @@ def wait_for_tcp_port(host, port=22):
     while True:
         sys.stdout.write(".")
         sys.stdout.flush()
-        try:
-            s = socket.socket()
-            s.connect((host, port))
+        s = socket.socket()
+        result = s.connect_ex((host, port))
+        if result == 0:
+            s.close()
             break
-        except:
-            pass
         time.sleep(5)
     end_time = datetime.now()
     print("Port {port} is now available. Waited {t} seconds.".format(
@@ -67,7 +73,6 @@ def wait_for_cluster_state(conn, cluster_instances, cluster_state="running", nam
     )
     sys.stdout.flush()
     start_time = datetime.now()
-    num_attempts = 0
     while True:
         for i in cluster_instances:
             i.update()
@@ -78,7 +83,6 @@ def wait_for_cluster_state(conn, cluster_instances, cluster_state="running", nam
             statuses.extend(conn.get_all_instance_status(instance_ids=batch))
         if all(i.state == cluster_state for i in cluster_instances):
             break
-        num_attempts += 1
         sys.stdout.write(".")
         sys.stdout.flush()
         time.sleep(5)
@@ -94,36 +98,63 @@ def setup_security_groups(conn, cluster_name, opts):
     print("Setting up security groups...")
     master_group = get_or_make_group(
         conn, cluster_name + "-master", opts.vpc_id)
-    slave_group = get_or_make_group(
-        conn, cluster_name + "-slaves", opts.vpc_id)
+    worker_group = get_or_make_group(
+        conn, cluster_name + "-workers", opts.vpc_id)
     authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
         if opts.vpc_id is None:
             master_group.authorize(src_group=master_group)
-            master_group.authorize(src_group=slave_group)
+            master_group.authorize(src_group=worker_group)
         else:
             master_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
                                    src_group=master_group)
             master_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
-                                   src_group=slave_group)
+                                   src_group=worker_group)
         master_group.authorize('tcp', 0, 65535, authorized_address)
-    if slave_group.rules == []:  # Group was just now created
+    if worker_group.rules == []:  # Group was just now created
         if opts.vpc_id is None:
-            slave_group.authorize(src_group=master_group)
-            slave_group.authorize(src_group=slave_group)
+            worker_group.authorize(src_group=master_group)
+            worker_group.authorize(src_group=worker_group)
         else:
-            slave_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
+            worker_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
                                   src_group=master_group)
-            slave_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
-                                  src_group=slave_group)
-        slave_group.authorize('tcp', 22, 22, authorized_address)
-    return (master_group, slave_group)
+            worker_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
+                                  src_group=worker_group)
+        worker_group.authorize('tcp', 22, 22, authorized_address)
+    return (master_group, worker_group)
 
+
+def delete_security_groups(conn, cluster_name, opts):
+    print("Deleting security groups...")
+    master_group = get_group(conn, cluster_name + "-master")
+    # TODO: deprecate this in Jan 2016
+    slave_group = get_group(conn, cluster_name + "-slaves")
+    worker_group = get_group(conn, cluster_name + "-workers")
+    groups = master_group + worker_group + slave_group
+    success = True
+    for group in groups:
+        print("Deleting rules in security group " + group.name)
+        for rule in group.rules:
+            for grant in rule.grants:
+                success &= conn.revoke_security_group(group_id=group.id, ip_protocol=rule.ip_protocol,
+                                                      from_port=rule.from_port, to_port=rule.to_port,
+                                                      src_security_group_group_id=grant.group_id, cidr_ip=grant.cidr_ip)
+    time.sleep(2)
+    for group in groups:
+        try:
+            conn.delete_security_group(group_id=group.id)
+            print("Deleted security group %s" % group.name)
+        except boto.exception.EC2ResponseError, e:
+            success = False
+            print("Failed to delete security group %s" % group.name)
+            print(e)
+    if not success:
+        print("Failed to delete all security groups, try again later")
 
 def parse_options():
     parser = OptionParser(
         usage="%prog [options] <action> <cluster_name>\n\n"
-        + "<action> can be: launch, destroy")
+              + "<action> can be: launch, destroy")
     parser.add_option(
         "-k", "--key-pair", default=None,
         help="Key pair to use on instances")
@@ -179,19 +210,19 @@ def find_instance_by_name(conn, name):
 
 def start_master(conn, opts, cluster_name, master_group):
     try:
-        image = conn.get_all_images(image_ids=[opts.ami])[0]
-    except:
+        conn.get_all_images(image_ids=[opts.ami])[0]
+    except boto.exception.EC2ResponseError:
         print("Could not find AMI " + opts.ami)
         sys.exit(1)
     if opts.vpc_id:
         interface = NetworkInterfaceSpecification(subnet_id=opts.subnet_id,
-                                              groups=[master_group.id],
-                                              associate_public_ip_address=True)
+                                                  groups=[master_group.id],
+                                                  associate_public_ip_address=True)
         interfaces = NetworkInterfaceCollection(interface)
         security_group_ids = None
     else:
         interfaces = None
-        security_group_ids=[master_group.id]
+        security_group_ids = [master_group.id]
     master_res = conn.run_instances(
         image_id=opts.ami,
         key_name=opts.key_pair,
@@ -208,7 +239,7 @@ def start_master(conn, opts, cluster_name, master_group):
     return instance
 
 
-def validate_opts(conn,opts,action):
+def validate_opts(conn, opts, action):
     if opts.zone is None and opts.vpc_id is None:
         opts.zone = random.choice(conn.get_all_zones()).name
     if opts.vpc_id is not None and opts.zone is None:
@@ -223,10 +254,11 @@ def validate_opts(conn,opts,action):
             sys.exit(1)
     return opts
 
+
 def main():
     (opts, action, cluster_name) = parse_options()
     conn = boto.ec2.connect_to_region(opts.region)
-    opts = validate_opts(conn,opts,action)
+    opts = validate_opts(conn, opts, action)
 
     if action == "launch":
         (master_group, slave_group) = setup_security_groups(conn, cluster_name, opts)
@@ -305,32 +337,47 @@ def main():
         wait_for_tcp_port(master_node.public_dns_name)
         print("SSH ready:")
         print("ssh ubuntu@{h}".format(h=master_node.public_dns_name))
-        wait_for_tcp_port(master_node.public_dns_name,port=18080)
+        wait_for_tcp_port(master_node.public_dns_name, port=18080)
         print("Spark master ready:")
         print(
             "Spark WebUI: http://{h}:18080".format(h=master_node.public_dns_name))
     if action == "destroy":
         master_node = find_instance_by_name(conn, cluster_name + '-master')
         print("Terminating master...")
-        master_node.terminate()
+        if master_node:
+            conn.create_tags([master_node.id], {"Name": "{c}-master-terminated".format(c=cluster_name)})
+            master_node.terminate()
         print("Shutting down autoscaling group...")
         autoscale = boto.ec2.autoscale.connect_to_region(opts.region)
         aglist = autoscale.get_all_groups(names=[cluster_name + "-ag"])
+        ag = None
         if aglist:
             ag = aglist[0]
-        lclist = autoscale.get_all_launch_configurations(
-            name=cluster_name + "-lc")
+            ag.shutdown_instances()
+            instances_ids = [i.instance_id for i in ag.instances]
+            instances = conn.get_only_instances(instances_ids)
+        else:
+            instances = []
+        lclist = autoscale.get_all_launch_configurations(names=[cluster_name + "-lc"])
+        lc = None
         if lclist:
             lc = lclist[0]
-        ag.shutdown_instances()
-        instances_ids = [i.instance_id for i in ag.instances]
-        instances = conn.get_only_instances(instances_ids)
         wait_for_cluster_state(
             conn, instances, cluster_state="terminated", name="instances")
         time.sleep(10)
-        ag.delete()
-        lc.delete()
+        if ag:
+            try:
+                ag.delete()
+            except Exception, e:
+                print("Couldn't delete autoscaling group: %s" % e)
+        if lc:
+            try:
+                lc.delete()
+            except Exception, e:
+                print("Couldn't delete launch configuration: %s" % e)
+        delete_security_groups(conn, cluster_name, opts)
         print("All done.")
+
 
 if __name__ == "__main__":
     main()

@@ -124,7 +124,7 @@ def setup_security_groups(conn, cluster_name, opts):
     return (master_group, worker_group)
 
 
-def delete_security_groups(conn, cluster_name, opts):
+def delete_security_groups(conn, cluster_name):
     print("Deleting security groups...")
     master_group = get_group(conn, cluster_name + "-master")
     # TODO: deprecate this in Jan 2016
@@ -375,7 +375,7 @@ def main():
                 lc.delete()
             except Exception, e:
                 print("Couldn't delete launch configuration: %s" % e)
-        delete_security_groups(conn, cluster_name, opts)
+        delete_security_groups(conn, cluster_name)
         print("All done.")
 
 

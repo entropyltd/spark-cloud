@@ -1,6 +1,8 @@
 # spark-cloud
 Spark-cloud is a set of scripts for starting spark clusters on ec2
 
+[![Join the chat at https://gitter.im/entropyltd/spark-cloud](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/entropyltd/spark-cloud?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 [![Code Health](https://landscape.io/github/entropyltd/spark-cloud/master/landscape.svg?style=flat)](https://landscape.io/github/entropyltd/spark-cloud/master)
 
 # Warning

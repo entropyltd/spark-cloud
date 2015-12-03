@@ -1,6 +1,8 @@
 # spark-cloud
 Spark-cloud is a set of scripts for starting spark clusters on ec2
 
+[![Code Health](https://landscape.io/github/entropyltd/spark-cloud/master/landscape.svg?style=flat)](https://landscape.io/github/entropyltd/spark-cloud/master)
+
 # Warning
 spark-cloud is Alpha quality pre-relase software, you are using it at your own risk.
 Always check that your clusters have properly started/stopped.

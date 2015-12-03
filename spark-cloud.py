@@ -166,7 +166,7 @@ def parse_options():
         "-r", "--region", default="us-east-1",
         help="EC2 region used to launch instances in, or to find them in (default: %default)")
     parser.add_option(
-        "-a", "--ami", default="ami-1ff4b975",
+        "-a", "--ami", default="ami-cdf3bea7",
         help="Amazon Machine Image ID to use")
     parser.add_option(
         "--authorized-address", type="string", default="0.0.0.0/0",

@@ -16,3 +16,10 @@
   template: src={{ item }}.j2 dest=/etc/init.d/{{ item }} owner=root group=root mode=0755
   with_items:
   - spark-master
+  - spark-worker
+
+- name: copy spark aliases
+  template: src={{ item }}.j2 dest=/etc/profile.d/{{ item }} owner=root group=root mode=0755
+  with_items:
+  - spark-alias.sh
+

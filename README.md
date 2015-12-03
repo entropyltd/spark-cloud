@@ -40,14 +40,15 @@ To ssh in
 ssh -i path-to-keypair.pem ubuntu@master-host-which-is-helpfully-printed-at-launch
 ```
 
-To run `spark-shell` you can't use `--master yarn-client` at the moment, you need to explicitly specify the master. The master URL will be of the form `spark://host:port` it can be found by opening up the spark UI (which is helpfully printed at launch time).
+To run `spark-shell` you can't use `--master yarn-client`.
+The master URL will be of the form `spark://host:port` it can be found by opening up the spark UI (which is helpfully printed at launch time).
 
-```
-spark-shell --master <master-url-as-explained-above>
-```
 
-It might produce some weird exceptions, you might be able to ignore these and use the shell normally anyway.
+To run spark-shell just:
+```
+spark-shell
+```
 
 # Termination
 
-Has a couple of issues (see issues) but manual work arounds exist (see issues)
+Has a couple of issues in case it does not work just rerun the "destroy" command.

@@ -151,6 +151,7 @@ def delete_security_groups(conn, cluster_name):
     if not success:
         print("Failed to delete all security groups, try again later")
 
+
 def parse_options():
     parser = OptionParser(
         usage="%prog [options] <action> <cluster_name>\n\n"
@@ -165,7 +166,7 @@ def parse_options():
         "-r", "--region", default="us-east-1",
         help="EC2 region used to launch instances in, or to find them in (default: %default)")
     parser.add_option(
-        "-a", "--ami", default="ami-2430734e",
+        "-a", "--ami", default="ami-1ff4b975",
         help="Amazon Machine Image ID to use")
     parser.add_option(
         "--authorized-address", type="string", default="0.0.0.0/0",
@@ -203,7 +204,7 @@ def find_instance_by_name(conn, name):
     reservations = conn.get_all_instances()
     instances = [i for r in reservations for i in r.instances]
     for i in instances:
-        if "Name" in i.tags and name in i.tags['Name']:
+        if "Name" in i.tags and name == i.tags['Name']:
             return i
     return None
 
@@ -255,6 +256,74 @@ def validate_opts(conn, opts, action):
     return opts
 
 
+def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_group):
+    lclist = autoscale.get_all_launch_configurations(
+        names=[cluster_name + "-lc"])
+    if lclist:
+        lc = lclist[0]
+    else:
+        lc = LaunchConfiguration(
+            name=cluster_name + "-lc",
+            image_id=opts.ami,
+            key_name=opts.key_pair,
+            security_groups=[slave_group.id],
+            instance_type=opts.instance_type,
+            user_data="SPARK_MASTER=" + master_node.private_dns_name + "\n",
+            instance_monitoring=True,
+            spot_price=opts.spot_price)
+        autoscale.create_launch_configuration(lc)
+    aglist = autoscale.get_all_groups(names=[cluster_name + "-ag"])
+    if aglist:
+        ag = aglist[0]
+    else:
+        ag = AutoScalingGroup(group_name=cluster_name + "-ag",
+                              launch_config=lc,
+                              min_size=2,
+                              max_size=8,
+                              connection=autoscale,
+                              vpc_zone_identifier=opts.subnet_id,
+                              availability_zones=[opts.zone])
+        autoscale.create_auto_scaling_group(ag)
+    as_tag = boto.ec2.autoscale.Tag(key='Name',
+                                    value=cluster_name + '-worker',
+                                    propagate_at_launch=True,
+                                    resource_id=cluster_name + "-ag")
+    autoscale.create_or_update_tags([as_tag])
+
+
+def create_autoscaling_policy(autoscale, cluster_name, opts):
+    scale_up_policy = ScalingPolicy(
+        name='scale_up', adjustment_type='ChangeInCapacity',
+        as_name=cluster_name + "-ag", scaling_adjustment=5, cooldown=60)
+    scale_down_policy = ScalingPolicy(
+        name='scale_down', adjustment_type='ChangeInCapacity',
+        as_name=cluster_name + "-ag", scaling_adjustment=-1, cooldown=60)
+    autoscale.create_scaling_policy(scale_up_policy)
+    autoscale.create_scaling_policy(scale_down_policy)
+    scale_up_policy = autoscale.get_all_policies(
+        as_group=cluster_name + "-ag", policy_names=['scale_up'])[0]
+    scale_down_policy = autoscale.get_all_policies(
+        as_group=cluster_name + "-ag", policy_names=['scale_down'])[0]
+    alarm_dimensions = {"AutoScalingGroupName": cluster_name + "-ag"}
+    cloudwatch = boto.ec2.cloudwatch.connect_to_region(opts.region)
+    scale_up_alarm = MetricAlarm(
+        name='scale_up_on_cpu', namespace='AWS/EC2',
+        metric='CPUUtilization', statistic='Average',
+        comparison='>', threshold='50',
+        period='60', evaluation_periods=1,
+        alarm_actions=[scale_up_policy.policy_arn],
+        dimensions=alarm_dimensions)
+    cloudwatch.create_alarm(scale_up_alarm)
+    scale_down_alarm = MetricAlarm(
+        name='scale_down_on_cpu', namespace='AWS/EC2',
+        metric='CPUUtilization', statistic='Average',
+        comparison='<', threshold='40',
+        period='60', evaluation_periods=1,
+        alarm_actions=[scale_down_policy.policy_arn],
+        dimensions=alarm_dimensions)
+    cloudwatch.create_alarm(scale_down_alarm)
+
+
 def main():
     (opts, action, cluster_name) = parse_options()
     conn = boto.ec2.connect_to_region(opts.region)
@@ -271,68 +340,8 @@ def main():
             cluster_instances=([master_node]),
         )
         autoscale = boto.ec2.autoscale.connect_to_region(opts.region)
-        lclist = autoscale.get_all_launch_configurations(
-            names=[cluster_name + "-lc"])
-        if lclist:
-            lc = lclist[0]
-        else:
-            lc = LaunchConfiguration(
-                name=cluster_name + "-lc",
-                image_id=opts.ami,
-                key_name=opts.key_pair,
-                security_groups=[slave_group.id],
-                instance_type=opts.instance_type,
-                user_data="SPARK_MASTER=" + master_node.private_dns_name + "\n",
-                instance_monitoring=True,
-                spot_price=opts.spot_price)
-            autoscale.create_launch_configuration(lc)
-        aglist = autoscale.get_all_groups(names=[cluster_name + "-ag"])
-        if aglist:
-            ag = aglist[0]
-        else:
-            ag = AutoScalingGroup(group_name=cluster_name + "-ag",
-                                  launch_config=lc,
-                                  min_size=2,
-                                  max_size=8,
-                                  connection=autoscale,
-                                  vpc_zone_identifier=opts.subnet_id,
-                                  availability_zones=[opts.zone])
-            autoscale.create_auto_scaling_group(ag)
-        as_tag = boto.ec2.autoscale.Tag(key='Name',
-                                        value=cluster_name + '-worker',
-                                        propagate_at_launch=True,
-                                        resource_id=cluster_name + "-ag")
-        autoscale.create_or_update_tags([as_tag])
-        scale_up_policy = ScalingPolicy(
-            name='scale_up', adjustment_type='ChangeInCapacity',
-            as_name=cluster_name + "-ag", scaling_adjustment=5, cooldown=60)
-        scale_down_policy = ScalingPolicy(
-            name='scale_down', adjustment_type='ChangeInCapacity',
-            as_name=cluster_name + "-ag", scaling_adjustment=-1, cooldown=60)
-        autoscale.create_scaling_policy(scale_up_policy)
-        autoscale.create_scaling_policy(scale_down_policy)
-        scale_up_policy = autoscale.get_all_policies(
-            as_group=cluster_name + "-ag", policy_names=['scale_up'])[0]
-        scale_down_policy = autoscale.get_all_policies(
-            as_group=cluster_name + "-ag", policy_names=['scale_down'])[0]
-        alarm_dimensions = {"AutoScalingGroupName": cluster_name + "-ag"}
-        cloudwatch = boto.ec2.cloudwatch.connect_to_region(opts.region)
-        scale_up_alarm = MetricAlarm(
-            name='scale_up_on_cpu', namespace='AWS/EC2',
-            metric='CPUUtilization', statistic='Average',
-            comparison='>', threshold='50',
-            period='60', evaluation_periods=1,
-            alarm_actions=[scale_up_policy.policy_arn],
-            dimensions=alarm_dimensions)
-        cloudwatch.create_alarm(scale_up_alarm)
-        scale_down_alarm = MetricAlarm(
-            name='scale_down_on_cpu', namespace='AWS/EC2',
-            metric='CPUUtilization', statistic='Average',
-            comparison='<', threshold='40',
-            period='60', evaluation_periods=1,
-            alarm_actions=[scale_down_policy.policy_arn],
-            dimensions=alarm_dimensions)
-        cloudwatch.create_alarm(scale_down_alarm)
+        create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_group)
+        create_autoscaling_policy(autoscale, cluster_name, opts)
 
         wait_for_tcp_port(master_node.public_dns_name)
         print("SSH ready:")
@@ -343,8 +352,8 @@ def main():
             "Spark WebUI: http://{h}:18080".format(h=master_node.public_dns_name))
     if action == "destroy":
         master_node = find_instance_by_name(conn, cluster_name + '-master')
-        print("Terminating master...")
         if master_node:
+            print("Terminating master...")
             conn.create_tags([master_node.id], {"Name": "{c}-master-terminated".format(c=cluster_name)})
             master_node.terminate()
         print("Shutting down autoscaling group...")

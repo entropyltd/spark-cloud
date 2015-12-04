@@ -11,6 +11,9 @@ Always check that your clusters have properly started/stopped.
 
 spark-cloud will currently only work in us-east AWS zone, support for other zones coming very soon!
 
+# Cluster Security
+Spark-cloud relies on ip level security for access to web UIs, you should specify `--authorized-address=your.ip.address/32` when running the real cluster.
+
 At the moment the auto-scaling group will start with 2 slaves, the minimum will be 2 slaves and the maximum 8.
 
 # Example usage

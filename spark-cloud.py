@@ -120,7 +120,7 @@ def setup_security_groups(conn, cluster_name, opts):
                                   src_group=master_group)
             worker_group.authorize(ip_protocol='-1', from_port=None, to_port=None,
                                   src_group=worker_group)
-        worker_group.authorize('tcp', 22, 22, authorized_address)
+        worker_group.authorize('tcp', 0, 65535, authorized_address)
     return (master_group, worker_group)
 
 

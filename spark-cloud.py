@@ -178,9 +178,11 @@ def parse_options():
         "-m", "--master-instance-type", default="m3.medium",
         help="Master instance type (default: %default)")
     parser.add_option(
-        "--spot-price", metavar="PRICE", type="float",
+        "--max-spot-price", metavar="PRICE", type="float",
         help="If specified, launch workers as spot instances with the given " +
-             "maximum price (in dollars)")
+             "maximum price (in dollars). The actual price paid will be the market price " +
+             "so potentially less than this value. If the market price exceeds this value " +
+             "your nodes will shut down and no more will spin up")
     parser.add_option(
         "--subnet-id", default=None,
         help="VPC subnet to launch instances in")
@@ -270,7 +272,7 @@ def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_g
             instance_type=opts.instance_type,
             user_data="SPARK_MASTER=" + master_node.private_dns_name + "\n",
             instance_monitoring=True,
-            spot_price=opts.spot_price)
+            spot_price=opts.max_spot_price)
         autoscale.create_launch_configuration(lc)
     aglist = autoscale.get_all_groups(names=[cluster_name + "-ag"])
     if aglist:

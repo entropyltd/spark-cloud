@@ -17,7 +17,7 @@ job_result=job-result.txt
 
 working_directory=`pwd`
 
-correct_value=TODO
+correct_value="-1696934592"
 
 ssh_args="-o StrictHostKeyChecking=no -i ${key_pair_path}"
 

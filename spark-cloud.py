@@ -178,6 +178,12 @@ def parse_options():
         "-m", "--master-instance-type", default="m3.medium",
         help="Master instance type (default: %default)")
     parser.add_option(
+        "-n", "--min-instances", type="int", default="2",
+        help="Minimum number of instances for the auto-scaling group (default %default)")
+    parser.add_option(
+        "-x", "--max-instances", type="int", default="8",
+        help="Maximum number of instances for the auto-scaling group (default %default)")
+    parser.add_option(
         "--max-spot-price", metavar="PRICE", type="float",
         help="If specified, launch workers as spot instances with the given " +
              "maximum price (in dollars). The actual price paid will be the market price " +
@@ -280,8 +286,8 @@ def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_g
     else:
         ag = AutoScalingGroup(group_name=cluster_name + "-ag",
                               launch_config=lc,
-                              min_size=2,
-                              max_size=8,
+                              min_size=opts.min_instances,
+                              max_size=opts.max_instances,
                               connection=autoscale,
                               vpc_zone_identifier=opts.subnet_id,
                               availability_zones=[opts.zone])

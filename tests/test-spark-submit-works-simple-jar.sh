@@ -55,7 +55,7 @@ function extract-master-node-from-log {
 }
 
 function create-cluster {
-    ${script_path} -k ${key_pair} --zone=us-east-1e --spot-price=0.02 launch ${cluster_name} | tee ${test_log_path}
+    ${script_path} -k ${key_pair} --zone=us-east-1e --max-spot-price=0.02 --min-instances=1 --max-instances=3 launch ${cluster_name} | tee ${test_log_path}
 }
 
 function build-simple-spark-app {

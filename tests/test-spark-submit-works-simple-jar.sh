@@ -13,6 +13,8 @@ home_dir=/home/${ubuntu}
 
 job_result=job-result.txt
 
+working_directory=`pwd`
+
 correct_value=TODO
 
 ssh_args="-o StrictHostKeyChecking=no -i ${key_pair_path}"
@@ -45,9 +47,10 @@ function create-cluster {
 }
 
 function build-simple-spark-app {
-
+	cd ${working_directory}/test-spark-app
+	sbt package
+	cd ${working_directory}
 }
-
 
 function spark-submit-simple-app {
 	scp ${ssh_args} ${jar} $1:${home_dir}/

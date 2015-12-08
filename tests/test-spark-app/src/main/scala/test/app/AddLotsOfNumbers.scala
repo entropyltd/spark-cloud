@@ -4,8 +4,6 @@ import java.io.File
 
 import org.apache.spark.{SparkContext, SparkConf}
 
-import scala.reflect.io.Path
-
 object AddLotsOfNumbers {
 
   def main(args: Array[String]): Unit = {
@@ -15,14 +13,16 @@ object AddLotsOfNumbers {
     val sc: SparkContext = new SparkContext(new SparkConf().setAppName("Add lots of numbers"))
 
     val numPartitions: Int = 100
-    val doSomethingNum: Int = 20000
+    val doSomethingNum: Int = 2000
 
-    val count: Int = sc.makeRDD(1 to 1000000)
-                      .repartition(numPartitions)
-                      .map(_ =>
-                        (1 to doSomethingNum).map(_.toString.length)
-                        .sum)
-                      .reduce(_ + _)
+    val count: Int =
+      sc.makeRDD(1 to 1000000)
+      .repartition(numPartitions)
+      .map(_ =>
+        (1 to doSomethingNum).map(_.toString.length)
+        .sum)
+      .reduce(_ + _)
+
     val pw = new java.io.PrintWriter(new File(fullPathToFile))
     try pw.write(count.toString + "\n") finally pw.close()
 

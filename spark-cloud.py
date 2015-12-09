@@ -177,12 +177,32 @@ def parse_options():
     parser.add_option(
         "-m", "--master-instance-type", default="m3.medium",
         help="Master instance type (default: %default)")
+    
+    parser.add_option(
+        "-u", "--scale-up-nodes-amount", type="int", default="5",
+        help="Number of nodes to scale up by when scale up alarm is triggered (default %default)")
+    parser.add_option(
+        "-d", "--scale-down-nodes-amount", type="int", default="1",
+        help="Number of nodes to scale down by when scale down alarm is triggered (default %default)")
+
+    parser.add_option(
+        "-U", "--scale-up-cooldown", type="int", default="60",
+        help="The amount of time, in seconds, after a scale up activity completes before any further " +
+             "scale up actions can occur. See the following link for more information " + 
+             "http://docs.aws.amazon.com/AutoScaling/latest/DeveloperGuide/Cooldown.html#cooldowns-scaling-specific (default %default)")
+    parser.add_option(
+        "-D", "--scale-down-cooldown", type="int", default="60",
+        help="The amount of time, in seconds, after a scale down activity completes before any further " +
+             "scale down actions can occur. See the following link for more information " + 
+             "http://docs.aws.amazon.com/AutoScaling/latest/DeveloperGuide/Cooldown.html#cooldowns-scaling-specific (default %default)")
+
     parser.add_option(
         "-n", "--min-instances", type="int", default="2",
         help="Minimum number of instances for the auto-scaling group (default %default)")
     parser.add_option(
         "-x", "--max-instances", type="int", default="8",
         help="Maximum number of instances for the auto-scaling group (default %default)")
+
     parser.add_option(
         "--max-spot-price", metavar="PRICE", type="float",
         help="If specified, launch workers as spot instances with the given " +
@@ -302,10 +322,10 @@ def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_g
 def create_autoscaling_policy(autoscale, cluster_name, opts):
     scale_up_policy = ScalingPolicy(
         name='scale_up', adjustment_type='ChangeInCapacity',
-        as_name=cluster_name + "-ag", scaling_adjustment=5, cooldown=60)
+        as_name=cluster_name + "-ag", scaling_adjustment=opts.scale_up_nodes_amount, cooldown=opts.scale_up_cooldown)
     scale_down_policy = ScalingPolicy(
         name='scale_down', adjustment_type='ChangeInCapacity',
-        as_name=cluster_name + "-ag", scaling_adjustment=-1, cooldown=60)
+        as_name=cluster_name + "-ag", scaling_adjustment=-opts.scale_down_nodes_amount, cooldown=opts.scale_down_cooldown)
     autoscale.create_scaling_policy(scale_up_policy)
     autoscale.create_scaling_policy(scale_down_policy)
     scale_up_policy = autoscale.get_all_policies(

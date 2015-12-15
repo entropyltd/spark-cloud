@@ -1,0 +1,4 @@
+
+tests/test-spark-app/project*
+tests/test-spark-app/.idea*
+tests/test-spark-app/target*

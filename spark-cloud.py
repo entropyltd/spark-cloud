@@ -177,10 +177,38 @@ def parse_options():
     parser.add_option(
         "-m", "--master-instance-type", default="m3.medium",
         help="Master instance type (default: %default)")
+    
     parser.add_option(
-        "--spot-price", metavar="PRICE", type="float",
+        "-u", "--scale-up-nodes-amount", type="int", default="5",
+        help="Number of nodes to scale up by when scale up alarm is triggered (default %default)")
+    parser.add_option(
+        "-d", "--scale-down-nodes-amount", type="int", default="1",
+        help="Number of nodes to scale down by when scale down alarm is triggered (default %default)")
+
+    parser.add_option(
+        "-U", "--scale-up-cooldown", type="int", default="60",
+        help="The amount of time, in seconds, after a scale up activity completes before any further " +
+             "scale up actions can occur. See the following link for more information " + 
+             "http://docs.aws.amazon.com/AutoScaling/latest/DeveloperGuide/Cooldown.html#cooldowns-scaling-specific (default %default)")
+    parser.add_option(
+        "-D", "--scale-down-cooldown", type="int", default="60",
+        help="The amount of time, in seconds, after a scale down activity completes before any further " +
+             "scale down actions can occur. See the following link for more information " + 
+             "http://docs.aws.amazon.com/AutoScaling/latest/DeveloperGuide/Cooldown.html#cooldowns-scaling-specific (default %default)")
+
+    parser.add_option(
+        "-n", "--min-instances", type="int", default="2",
+        help="Minimum number of instances for the auto-scaling group (default %default)")
+    parser.add_option(
+        "-x", "--max-instances", type="int", default="8",
+        help="Maximum number of instances for the auto-scaling group (default %default)")
+
+    parser.add_option(
+        "--max-spot-price", metavar="PRICE", type="float",
         help="If specified, launch workers as spot instances with the given " +
-             "maximum price (in dollars)")
+             "maximum price (in dollars). The actual price paid will be the market price " +
+             "so potentially less than this value. If the market price exceeds this value " +
+             "your nodes will shut down and no more will spin up")
     parser.add_option(
         "--subnet-id", default=None,
         help="VPC subnet to launch instances in")
@@ -270,7 +298,7 @@ def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_g
             instance_type=opts.instance_type,
             user_data="SPARK_MASTER=" + master_node.private_dns_name + "\n",
             instance_monitoring=True,
-            spot_price=opts.spot_price)
+            spot_price=opts.max_spot_price)
         autoscale.create_launch_configuration(lc)
     aglist = autoscale.get_all_groups(names=[cluster_name + "-ag"])
     if aglist:
@@ -278,8 +306,8 @@ def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_g
     else:
         ag = AutoScalingGroup(group_name=cluster_name + "-ag",
                               launch_config=lc,
-                              min_size=2,
-                              max_size=8,
+                              min_size=opts.min_instances,
+                              max_size=opts.max_instances,
                               connection=autoscale,
                               vpc_zone_identifier=opts.subnet_id,
                               availability_zones=[opts.zone])
@@ -294,10 +322,10 @@ def create_autoscaling_group(autoscale, cluster_name, master_node, opts, slave_g
 def create_autoscaling_policy(autoscale, cluster_name, opts):
     scale_up_policy = ScalingPolicy(
         name='scale_up', adjustment_type='ChangeInCapacity',
-        as_name=cluster_name + "-ag", scaling_adjustment=5, cooldown=60)
+        as_name=cluster_name + "-ag", scaling_adjustment=opts.scale_up_nodes_amount, cooldown=opts.scale_up_cooldown)
     scale_down_policy = ScalingPolicy(
         name='scale_down', adjustment_type='ChangeInCapacity',
-        as_name=cluster_name + "-ag", scaling_adjustment=-1, cooldown=60)
+        as_name=cluster_name + "-ag", scaling_adjustment=-opts.scale_down_nodes_amount, cooldown=opts.scale_down_cooldown)
     autoscale.create_scaling_policy(scale_up_policy)
     autoscale.create_scaling_policy(scale_down_policy)
     scale_up_policy = autoscale.get_all_policies(
